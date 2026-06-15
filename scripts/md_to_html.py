@@ -86,6 +86,7 @@ tbody td a:hover, .spotlight a:hover { text-decoration: underline; }
 .error-box li strong { color:#c62828; }
 .plain-list { padding-left: 18px; font-size: 13px; }
 .plain-list li { margin-bottom: 4px; }
+.section p { font-size: 13px; color: #444; margin-bottom: 8px; }
 .footer { text-align:center; font-size:12px; color:#999; padding:16px; background:#f5f5f5; border-top:1px solid #eee; }
 """.strip()
 
@@ -100,19 +101,19 @@ def inline(text: str) -> str:
 
 # ── Deadline badge ─────────────────────────────────────────────────────────
 
-def deadline_badge(text: str) -> str:
+def deadline_badge(text: str, force_closed: bool = False) -> str:
     t = text.strip()
-    if '締切済' in t or '締切済み' in t:
+    if not t or t == '-':
+        return t
+    if force_closed or '締切済' in t:
         return f'<span class="status-closed">{t}</span>'
     if '要確認' in t or '不明' in t:
         return f'<span class="status-check">{t}</span>'
-    if t and t != '-':
-        return f'<span class="status-open">{t}</span>'
-    return t
+    return f'<span class="status-open">{t}</span>'
 
 # ── Table parser ───────────────────────────────────────────────────────────
 
-def parse_table(lines: list[str]) -> str:
+def parse_table(lines: list[str], force_closed_deadline: bool = False) -> str:
     rows = []
     for line in lines:
         if re.match(r'^\|[-| :]+\|$', line.strip()):
@@ -134,7 +135,7 @@ def parse_table(lines: list[str]) -> str:
         html.append('<tr>')
         for i, cell in enumerate(row):
             if i == deadline_col:
-                html.append(f'<td>{deadline_badge(cell)}</td>')
+                html.append(f'<td>{deadline_badge(cell, force_closed_deadline)}</td>')
             else:
                 html.append(f'<td>{inline(cell)}</td>')
         html.append('</tr>')
@@ -197,20 +198,25 @@ def render_summary(lines: list[str], title: str) -> str:
 def render_proposals(lines: list[str]) -> str:
     html_parts: list[str] = []
     table_buf: list[str] = []
+    force_closed = False
 
     def flush_table():
         if table_buf:
-            html_parts.append(parse_table(table_buf))
+            html_parts.append(parse_table(table_buf, force_closed_deadline=force_closed))
             table_buf.clear()
 
     for line in lines:
         if line.startswith('### '):
             flush_table()
-            html_parts.append(f'<h3>{inline(line[4:].strip())}</h3>')
+            heading = line[4:].strip()
+            force_closed = '締切済' in heading
+            html_parts.append(f'<h3>{inline(heading)}</h3>')
         elif line.startswith('|'):
             table_buf.append(line)
         else:
             flush_table()
+            if line.strip():
+                html_parts.append(f'<p>{inline(line.strip())}</p>')
     flush_table()
     return '\n'.join(html_parts)
 
@@ -275,6 +281,8 @@ def render_trends(lines: list[str]) -> str:
             html_parts.append(f'<li>{inline(line.strip()[2:])}</li>')
         else:
             close_list()
+            if line.strip():
+                html_parts.append(f'<p>{inline(line.strip())}</p>')
 
     close_list()
     return '\n'.join(html_parts)
